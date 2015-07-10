@@ -2,89 +2,168 @@
 using System.Collections;
 
 public class BoltSkill : PlayerSkill {
-    private const float CHARGE_START_THRESH = 0.25f;
-    private const float CHARGE_HOLD_THRESH = 1f;
-    private const float QUICKBOLT_LOCK_TIME = 0.1f;
+    [Tooltip("How long the button needs to be held before charging begins")]
+    public float ChargeStartThreshold = 0.25f;
+    [Tooltip("How long the button needs to be held before a charged bolt can be fired")]
+    public float ChargeHoldThreshold = 1f;
+    [Tooltip("The time after a quick bolt is thrown that the player is locked in-place")]
+    public float StunBoltLockTime = 1f;
 
+    [Tooltip("The time after a quick bolt is thrown that the player is locked in strafing movement")]
+    public float QuickBoltLockTime = 0.4f;
+    [Tooltip("Time between quick bolt shots")]
+    public float QuickBoltDelay = 0.1f;
+    [Tooltip("Maximum number of quick bolts allowed in a flurry")]
+    public int FlurryMaxBolts = 3;
+    [Tooltip("Number of quick bolts needed to be fired in succession before a quick bolt flurry can start")]
+    public int FlurryPressThreshold = 4;
+    [Tooltip("Time after press to scan for a flurry input, that is, the number of presses indicated by Flurry Press " +
+             "Threshold")]
+    public float FlurryPressTime = 0.2f;
+    public float FlurryLockTime = 1f;
+
+    [Tooltip("How fast the player can move while strafing")]
     public float AimingMovementSpeed = 40f;
     public float QuickBoltSpread = 30f;
-    public float StunBoltRecoveryTime = 1f;
 
-    private Bullet m_quickBolt;
-    private Bullet m_stunBolt;
-    
+    public Bullet QuickBoltPrefab;
+    public Bullet StunBoltPrefab;
+
     private float m_chargeTime;
-    private float m_quickLockDuration;
-    private float m_stunRecoveryDuration;
-    private bool m_isQuickBoltLocked;
-    private bool m_isStunBoltLocked;
-    private PlayerController m_controller;
+    private int m_quickBolts = 0;
 
-    public BoltSkill(GameObject owner, Bullet quickBoltPrefab, Bullet stunBoltPrefab) :
-    base(owner) {
-        m_quickBolt = quickBoltPrefab;
-        m_stunBolt = stunBoltPrefab;
-        
-        m_quickBolt.CreatePool(10);
-        m_stunBolt.CreatePool(2);
+    private Coroutine m_flurryScan;
+    private Coroutine m_flurry;
+    private Coroutine m_cooldown;
 
-        m_controller = Owner.GetComponent<PlayerController>();
+    private bool m_isFlurryScanning = false;
+    private bool m_canFlurry = false;
+    private bool m_isFlurrying = false;
+
+    private PlayerMotor m_movement;
+    private Launchable m_launchable;
+    
+    public void Awake() {
+        QuickBoltPrefab.CreatePool(10);
+        StunBoltPrefab.CreatePool(2);
+
+        m_movement = GetComponent<PlayerMotor>();
+        m_launchable = GetComponent<Launchable>();
     }
 
-    public override void Start() {
+    private IEnumerator CooldownBeforeUnlockingPlayer(float time) {
+        yield return new WaitForSeconds(time);
+        m_movement.Movement = PlayerMotor.MovementStyle.Free;
+        IsFinished = true;
+    }
+
+    private IEnumerator Flurry() {
+        m_isFlurrying = true;
+        m_movement.Movement = PlayerMotor.MovementStyle.Lock;
+
+        // Fire bullets with a time delay
+        while (m_canFlurry) {
+            FireQuickBolt();
+            yield return new WaitForSeconds(QuickBoltDelay);
+        }
+        m_isFlurrying = false;
+        IsFinished = true;
+    }
+
+    private IEnumerator FlurryScanCountdown(float time) {
+        m_isFlurryScanning = true;
+
+        // This coroutine is started right after the first quick bolt is tossed
+        int quickBolts = m_quickBolts;
+        yield return new WaitForSeconds(time);
+        
+        // If the number of quickbolts tossed after the elapsed time is the same as before, then the player is clearly
+        // not rapidly pressing the button, and the flurry scan fails.
+        if (quickBolts == m_quickBolts) {
+            m_canFlurry = false;
+            m_quickBolts = 0;
+            m_movement.Movement = PlayerMotor.MovementStyle.Free;
+        }
+
+        m_isFlurryScanning = false;
+    }
+
+    private void FireQuickBolt() {
+        // Calculate spread
+        float spread = 2f * (Random.value - 0.5f) * QuickBoltSpread;
+        Quaternion direction = transform.rotation * Quaternion.AngleAxis(spread, Vector3.up);
+
+        // Fire quick bolt bullet
+        QuickBoltPrefab.Spawn(transform.position, direction);
+    }
+
+    public override void Press() {
+        IsFinished = false;
     }
 
     public override void Hold() {
-        m_controller.Movement = PlayerController.MovementStyle.Lock;
         m_chargeTime += Time.deltaTime;
 
-        if (m_chargeTime > CHARGE_START_THRESH) {
-            m_controller.Movement = PlayerController.MovementStyle.Strafe;
+        if (m_chargeTime > ChargeStartThreshold) {
+            m_movement.Movement = PlayerMotor.MovementStyle.Pivot;
         }
     }
     public override void Release() {
-        if (m_chargeTime > CHARGE_HOLD_THRESH) {
-            // If charge above the Stun threshold, toss a long-range pinning bolt
-            m_stunBolt.Spawn(Owner.transform.position, Owner.transform.rotation);
-            m_isStunBoltLocked = true;
+        // If charge above the Stun threshold, toss a long-range pinning bolt
+        if (m_chargeTime > ChargeHoldThreshold) {
+            StunBoltPrefab.Spawn(transform.position, transform.rotation);
+            m_launchable.LaunchBackward(80f, 8000f, 0);
 
-            m_controller.NudgeBackward(10f, 2000f);
-
-        } else {
+            // Lock player input for a little while
+            if (m_cooldown != null) {
+                StopCoroutine(m_cooldown);
+            }
+            m_cooldown = StartCoroutine(CooldownBeforeUnlockingPlayer(StunBoltLockTime));
             // Otherwise, toss a short range stunning bolt
-            m_controller.Movement = PlayerController.MovementStyle.Lock;            
+        } else {
+            // Check if a number of quick bolts have been tossed in the last few moments.  If so, looks like the player
+            // is trying to flurry.
+            m_quickBolts++;
 
-            // Calculate spread
-            float spread = 2f * (Random.value - 0.5f) * QuickBoltSpread;
-            Quaternion direction = Owner.transform.rotation * Quaternion.AngleAxis(spread, Vector3.up);
+            // Start flurry scan
+            if (m_flurryScan != null) {
+                StopCoroutine(m_flurryScan);
+            }
+            m_flurryScan = StartCoroutine(FlurryScanCountdown(FlurryPressTime));
 
-            // Spawn bullet
-            m_quickBolt.Spawn(Owner.transform.position, direction);
-            m_quickLockDuration = QUICKBOLT_LOCK_TIME;
-            m_isQuickBoltLocked = true;
+            // Only flurry while not already flurrying, flurreal
+            if (!m_isFlurrying) {
+                if (m_quickBolts > FlurryPressThreshold) {
+                    m_canFlurry = true;
+                    m_flurry = StartCoroutine(Flurry());
+                    // Otherwise, just toss out a single quick bolt while constraining the player to strafing movement
+                } else {
+                    // Spawn single bullet
+                    FireQuickBolt();
+                    m_launchable.LaunchForward(5f, 1000f, 0);
 
-            m_controller.NudgeBackward(5f, 2000f);
+                    // Keep the player strafing for a little while
+                    if (m_cooldown != null) {
+                        StopCoroutine(m_cooldown);
+                    }
+                    m_cooldown = StartCoroutine(CooldownBeforeUnlockingPlayer(QuickBoltLockTime));
+                }
+            }
         }
         m_chargeTime = 0f;
     }
 
-    public override void Update() {
-        if (m_isQuickBoltLocked) {
-            if (m_quickLockDuration > 0f) {
-                m_quickLockDuration -= Time.deltaTime;
-            } else {
-                m_isQuickBoltLocked = false;
-                m_controller.Movement = PlayerController.MovementStyle.Run;
-            }
-        }
+    public override void Interrupt() {
+        StopAllCoroutines();
+        m_isFlurrying = false;
+        m_isFlurryScanning = false;
+        m_canFlurry = false;
+        m_quickBolts = 0;
+    }
 
-        if (m_isStunBoltLocked) {
-            if (m_stunRecoveryDuration > 0f) {
-                m_stunRecoveryDuration -= Time.deltaTime;
-            } else {
-                m_isStunBoltLocked = false;
-                m_controller.Movement = PlayerController.MovementStyle.Run;
-            }
+    public override void Interrupt(PlayerSkill other) {
+        if (other is DashSkill) {
+            Interrupt();
         }
     }
 }

@@ -16,12 +16,12 @@ public class CameraSpinner : MonoBehaviour {
     public float SpinSpeed = 5f;
     [Tooltip("Enable this to force the camera to face the target")]
     public bool LookAtTarget = true;
-
-    public float Angle = 45f;
+    
+    public float Angle;
 
     private Camera m_camera;
     private Vector3 m_destinationPosition;
-
+    private bool m_angleChanged = false;
     public void Awake () {
         m_camera = GetComponent<Camera>();
 	}
