@@ -3,6 +3,8 @@ using System.Collections;
 
 [RequireComponent(typeof(PlayerMotor))]
 public class PlayerAim : MonoBehaviour {
+    public const float MOUSE_ATTENUATION = 0.01f;
+
     public enum InputDevice {
         Mouse,
         Gamepad
@@ -10,79 +12,130 @@ public class PlayerAim : MonoBehaviour {
     public InputDevice InputMode;
 
     public Camera Camera;
-    public float CursorSpeed = 100f;
-    public float InnerRadius = 5f;
-    public float OuterRadius = 20f;
+    public float Sensitivity = 1f;
+    public float InnerRadius = 1f;
+    public float OuterRadius = 8f;
+    public float DriftSpeed = 2f;
+
+    public Vector2 DebugRawAxes;
+
     public bool IsHidden {
         get;
         private set;
     }
 
-    public GameObject CursorDisplay;
+    public GameObject ScreenCursorDisplay;
+    public GameObject WorldCursorDisplay;
     public Vector3 Target;
 
-    private Vector3 m_cursorPos;
+    public Quaternion Rotation { get { return m_rotation; } }
+    public Vector3 Centroid { get { return ((Target - transform.position) / 2f) + transform.position; } }
+
+    public Vector3 Direction {
+        get {
+            return (Target - transform.position).normalized;
+        }
+    }
+
     private PlayerMotor m_movement;
     private PlanarViewVectors m_plane;
+
+    private Quaternion m_rotation;
+    private Vector3 m_centroid;
+    private Vector2 m_cursorPos;
+    private Vector2 m_axes;
+    private Vector3 m_offset;
 
     public void Awake() {
         m_movement = GetComponent<PlayerMotor>();
         m_plane = GetComponent<PlanarViewVectors>();
+
+        Target = transform.position + (transform.rotation * Vector3.forward);
+
+        if (InputMode == InputDevice.Mouse) {
+            m_cursorPos = Input.mousePosition;
+            Cursor.lockState = CursorLockMode.Confined;
+        }
     }
 
     public void Start() {
         if (Camera == null) {
             Camera = Camera.main;
         }
-
-        if (InputMode == InputDevice.Gamepad) {
-            CursorDisplay.SetActive(false);
-        }
     }
 
-    public void Show() {
-        if (IsHidden && InputMode == InputDevice.Gamepad && !CursorDisplay.activeSelf) {
-            CursorDisplay.SetActive(true);
-            m_cursorPos = Camera.WorldToScreenPoint(transform.position);
-        }
-        IsHidden = false;
-    }
-
-    public void Hide() {
-        if (!IsHidden && InputMode == InputDevice.Gamepad) {
-            CursorDisplay.SetActive(false);
-        }
-        IsHidden = true;
+    public void Recenter() {
+        m_offset = transform.rotation * Vector3.forward;
     }
 
     public void Update() {
+        float smallScreenHalfSize = Mathf.Min(Screen.width, Screen.height) / 2f;
+        float offsetMag = 0f;
+
         switch (InputMode) {
             case InputDevice.Mouse:
-                m_cursorPos = Input.mousePosition;
+                DebugRawAxes.Set(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
+                m_axes.Set(Input.GetAxisRaw("Mouse X") * Sensitivity * Time.deltaTime,
+                           Input.GetAxisRaw("Mouse Y") * Sensitivity * Time.deltaTime);
+
+                m_offset += ((m_plane.Forward * m_axes.y) + (m_plane.Right * m_axes.x));
+                offsetMag = m_offset.magnitude;
                 break;
             case InputDevice.Gamepad:
-                Vector3 axes = new Vector3(Input.GetAxis("Horizontal"),
-                                           Input.GetAxis("Vertical"),
-                                           0f);
+                DebugRawAxes.Set(Input.GetAxisRaw("Aim X"), Input.GetAxisRaw("Aim Y"));
+                m_axes.Set(Input.GetAxisRaw("Aim X") * Sensitivity * Time.deltaTime,
+                           Input.GetAxisRaw("Aim Y") * Sensitivity * Time.deltaTime);
 
-                Vector3 offset = axes * CursorSpeed * Time.deltaTime;
-                m_cursorPos += offset;
+                m_offset += ((m_plane.Forward * m_axes.y) + (m_plane.Right * m_axes.x));
+                offsetMag = m_offset.magnitude;
+
+                if (m_axes == Vector2.zero) {
+                    float drift = DriftSpeed * Time.deltaTime;
+                    if (offsetMag >= InnerRadius - drift) {
+                        m_offset -= m_offset.normalized * DriftSpeed * Time.deltaTime;
+                    } else if (offsetMag >= InnerRadius + drift) {
+                        m_offset += m_offset.normalized * DriftSpeed * Time.deltaTime;
+                    }
+                }
                 break;
         }
 
-        m_cursorPos.x = Mathf.Clamp(m_cursorPos.x, 0f, Screen.width);
-        m_cursorPos.y = Mathf.Clamp(m_cursorPos.y, 0f, Screen.height);
+        if (offsetMag > OuterRadius) {
+            m_offset = m_offset.normalized * OuterRadius;
+        }
+        Target = transform.position + m_offset;
 
-        CursorDisplay.transform.position = m_cursorPos;
-        Target = ScreenToWorldPoint(m_cursorPos);
+        if (ScreenCursorDisplay != null) {
+            ScreenCursorDisplay.transform.position = m_cursorPos;
+        }
+
+        if (WorldCursorDisplay != null) {
+            WorldCursorDisplay.transform.position = Target;
+        }
+        
+        Vector3 dp = Target - transform.position;
+        if (dp != Vector3.zero) {
+            m_rotation = Quaternion.LookRotation(dp, m_plane.Up);
+            m_centroid = (dp / 2f) + transform.position;
+        }
     }
 
-    private Vector3 ScreenToWorldPoint(Vector3 screenPoint) {
-        Ray cursorRay = Camera.ScreenPointToRay(screenPoint); // Emit a ray from screen
-        float rayDist;
-        m_plane.Plane.Raycast(cursorRay, out rayDist); // Find where on the ray it intersects with the player's current
-                                                       // control plane
+    public void OnDrawGizmos() {
+        Gizmos.color = Color.red;
+        Gizmos.DrawSphere(m_centroid, 1);
+    }
 
-        return cursorRay.GetPoint(rayDist); // That intersection point is the cursor's world position
+    private Vector3 ScreenToWorldPoint(Vector2 screenPoint) {
+        // Emit a ray from screen
+        Ray cursorRay = Camera.ScreenPointToRay(new Vector3(screenPoint.x, screenPoint.y, 0f));
+
+        Vector3 point = new Vector3();
+        float rayDist;
+
+        // Find where on the ray it intersects with the player's current control plane
+        if (m_plane.Plane.Raycast(cursorRay, out rayDist)) {
+            point = cursorRay.GetPoint(rayDist); // That intersection point is the cursor's world position
+        }
+        return point;
     }
 }

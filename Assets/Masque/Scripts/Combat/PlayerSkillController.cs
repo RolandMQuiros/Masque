@@ -3,9 +3,13 @@ using System.Collections;
 
 public class PlayerSkillController : MonoBehaviour {
     private const int MAX_SKILLS = 4;
+    private const string PRIMARY_FIRE_BTN = "Fire1";
+    private const string DASH_BTN = "Dash";
 
-    public PlayerSkill[] Skills;
-    public string[] Buttons;
+    public PlayerSkill[] AttackSkills;
+    public PlayerSkill DashSkill;
+    
+    private int m_activeAttackSkill = 0;
 
 	public void Awake() {
 	}
@@ -14,27 +18,25 @@ public class PlayerSkillController : MonoBehaviour {
     /// Checks the Inputs for a Skill
     /// </summary>
 	public void Update() {
-        for (int i = 0; i < Skills.Length; i++) {
-            if (Skills[i] != null && Buttons[i] != null) {
-                PlayerSkill skill = Skills[i];
-                string button = Buttons[i];
+        RunSkill(PRIMARY_FIRE_BTN, AttackSkills[m_activeAttackSkill]);
+        RunSkill(DASH_BTN, DashSkill);
+	}
 
-                if (Input.GetButtonDown(button)) {
-                    skill.Press();
+    private void RunSkill(string button, PlayerSkill skill) {
+        if (Input.GetButtonDown(button)) {
+            skill.Press();
 
-                    // Interrupt currently running skills
-                    for (int j = 0; j < Skills.Length; j++) {
-                        if (i != j && Skills[j] && !Skills[j].IsFinished) {
-                            Skills[j].Interrupt(skill);
-                        }
-                    }
-
-                } else if (Input.GetButton(button)) {
-                    skill.Hold();
-                } else if (Input.GetButtonUp(button)) {
-                    skill.Release();
+            for (int i = 0; i < AttackSkills.Length; i++) {
+                if (AttackSkills[i] != skill && !AttackSkills[i].IsFinished) {
+                    AttackSkills[i].Interrupt(skill);
                 }
             }
+            
+            DashSkill.Interrupt(skill);
+        } else if (Input.GetButton(button)) {
+            skill.Hold();
+        } else if (Input.GetButtonUp(button)) {
+            skill.Release();
         }
-	}
+    }
 }

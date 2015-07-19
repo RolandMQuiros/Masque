@@ -5,7 +5,7 @@ using System.Collections;
 /// Handles motion controls for Player, both mouse+keyboard and gamepad configuration.
 /// </summary>
 [RequireComponent(typeof(PlanarViewVectors))]
-[RequireComponent(typeof(NavMeshAgent))]
+[RequireComponent(typeof(MotionBuffer))]
 [RequireComponent(typeof(PlayerAim))]
 public class PlayerMotor : MonoBehaviour {
     public const float DEFAULT_TURN_SMOOTHING = 10f;
@@ -13,41 +13,46 @@ public class PlayerMotor : MonoBehaviour {
     public string ANIM_WALKING_SPEED = "Walking Speed";
 
     public Camera Camera;
-    public float RunSpeed = 100f;
-    public float AimSpeed = 40f;
+    public float MovementSpeed = 10f;
 
     public enum MovementStyle {
-        Free, // Move freely in all directions.  Player faces direction of motion
+        Free, // Move freely in all directions.  Player faces direction of crosshair
         Strafe, // Move freely in all directions, but player's direction is locked
-        Pivot, // Player is stationary, but changes direction
-        Aim, // Player is stationary and rotates towards the now-enabled crosshair
+        Pivot, // Player is stationary, facing crosshair
         Lock // Player cannot move or change direction
     }
     public MovementStyle Movement;
 
-    public Vector3 CurrentVelocity {
-        get;
-        private set;
-    }
+    /// <summary>
+    /// The velocity of this PlayerMotor's movement.
+    /// </summary>
+    public Vector3 Velocity { get; private set; }
+    /// <summary>
+    /// The rotation of this PlayerMotor's movement, calculated from the last non-zero value of Velocity.
+    /// </summary>
+    public Quaternion Rotation { get; private set; }
+    /// <summary>
+    /// The direction vector of this PlayerMotor's movement. Simply the normalized version of the the last non-zero
+    /// value of Velocity.
+    /// </summary>
+    public Vector3 Direction { get; private set; }
 
     #region components
     private PlanarViewVectors m_viewPlane;
-    private NavMeshAgent m_agent;
-    private CameraSpinner m_camSpinner;
+    private MotionBuffer m_motion;
     private Animator m_animator;
     private PlayerAim m_aim;
     #endregion
 
-    private Vector3 m_targetDirection;
+    private Quaternion m_targetRotation;
     private int m_animIsWalking;
     private int m_animWalkingSpeed;
 
-    public float DebugVelocity;
+    public Vector3 DebugVelocity;
 
     public void Awake() {
-        m_agent = GetComponent<NavMeshAgent>();
+        m_motion = GetComponent<MotionBuffer>();
         m_viewPlane = GetComponent<PlanarViewVectors>();
-        m_camSpinner = Camera.GetComponent<CameraSpinner>();
         m_animator = GetComponent<Animator>();
         m_aim = GetComponent<PlayerAim>();
 
@@ -65,71 +70,70 @@ public class PlayerMotor : MonoBehaviour {
         );
 
         // Update movement
+        //m_viewPlane.RefreshBaseVectors(Camera.transform);
+        Quaternion aimRot = m_aim.Rotation;
         switch (Movement) {
             case MovementStyle.Free:
-                CurrentVelocity = Move(axes, RunSpeed, true);
+                Velocity = Move(axes, MovementSpeed);
+                RotateTo(aimRot);
                 break;
             case MovementStyle.Strafe:
-                CurrentVelocity = Move(axes, AimSpeed, false);
+                Velocity = Move(axes, MovementSpeed);
                 break;
             case MovementStyle.Pivot:
-                CurrentVelocity = Move(axes, 0f, true);
+                Velocity = Vector3.zero;
+                RotateTo(aimRot);
                 break;
-            case MovementStyle.Aim:
-                CurrentVelocity = Vector3.zero;
-                Vector3 toTarget = (m_aim.Target - transform.position);
-                toTarget.y = 0f;
-                RotateTo(toTarget.normalized);
+            case MovementStyle.Lock:
+                Velocity = Vector3.zero;
                 break;
         }
 
-        float rotateAxis = Input.GetAxis("RotateHorizontal");
-        if (m_camSpinner && rotateAxis != 0f) {
-            m_camSpinner.Angle += 5f * rotateAxis;
+        if (Velocity != Vector3.zero) {
+            Rotation = Quaternion.LookRotation(Velocity, m_viewPlane.Up);
+            Direction = Velocity.normalized;
         }
+
+        DebugVelocity = Velocity;
     }
 
-    public Vector3 Move(Vector2 axes, float speed, bool turning = true, float turnSmoothing = DEFAULT_TURN_SMOOTHING) {
-        m_viewPlane.RefreshBaseVectors(Camera.transform);
+    public Vector3 Move(Vector2 axes, float speed, bool turnToMotion = false, float turnSmoothing = DEFAULT_TURN_SMOOTHING) {
         Vector3 direction = m_viewPlane.Apply(axes);
 
         Vector3 velocity = direction * speed * Time.deltaTime;
-        if (m_agent.enabled) {
-            m_agent.Move(velocity);
+        if (m_motion.enabled) {
+            m_motion.Move(velocity);
         }
 
-        if (turning) {
+        if (turnToMotion) {
             RotateTo(direction);
         }
+
         return velocity;
     }
 
     public void RotateTo(Vector3 direction, float turnSmoothing = DEFAULT_TURN_SMOOTHING) {
         if (direction != Vector3.zero) {
-            m_targetDirection = direction;
-        }
-
-        if (m_targetDirection != Vector3.zero) {
-            Quaternion targetRotation = Quaternion.LookRotation(m_targetDirection, Vector3.up);
-            Quaternion newRotation = Quaternion.Lerp(transform.rotation, targetRotation, turnSmoothing * Time.deltaTime);
-
+            m_targetRotation = Quaternion.LookRotation(direction, m_viewPlane.Up);
+            Quaternion newRotation = Quaternion.Lerp(transform.rotation, m_targetRotation, turnSmoothing * Time.deltaTime);
             transform.rotation = newRotation;
         }
     }
 
+    public void RotateTo(Quaternion rotation, float turnSmoothing = DEFAULT_TURN_SMOOTHING) {
+        m_targetRotation = rotation;
+        Quaternion newRotation = Quaternion.Lerp(transform.rotation, m_targetRotation, turnSmoothing * Time.deltaTime);
+        transform.rotation = newRotation;
+    }
 
     public bool WarpTo(Vector3 position, float radius) {
         NavMeshHit hit;
         bool canWarp = NavMesh.SamplePosition(position, out hit, radius, NavMesh.AllAreas);
 
         if (canWarp) {
-            m_agent.Warp(hit.position);
+            m_motion.Warp(hit.position);
         }
 
         return canWarp;
-    }
-
-    private void UpdateCrossHair() {
-
     }
 }

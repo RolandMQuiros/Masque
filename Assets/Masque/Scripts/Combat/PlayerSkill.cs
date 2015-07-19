@@ -27,6 +27,6 @@ public abstract class PlayerSkill : MonoBehaviour {
     public virtual void Press() { }
     public virtual void Hold() { }
     public virtual void Release() { }
-    public virtual void Interrupt() { }
-    public virtual void Interrupt(PlayerSkill other) { }
+    public virtual bool Interrupt() { return false; }
+    public virtual bool Interrupt(PlayerSkill other) { return false; }
 }

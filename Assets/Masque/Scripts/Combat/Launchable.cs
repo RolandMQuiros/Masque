@@ -9,7 +9,7 @@ public class BounceEventArgs : EventArgs {
 }
 
 [RequireComponent(typeof(Combatant))]
-[RequireComponent(typeof(NavMeshAgent))]
+[RequireComponent(typeof(MotionBuffer))]
 public class Launchable : MonoBehaviour {
     /// <summary>Signal that emits when this Launchable bounces on a wall</summary>
     public EventHandler<BounceEventArgs> Bounced;
@@ -25,7 +25,7 @@ public class Launchable : MonoBehaviour {
     [Tooltip("Which layers are checked for bounces")]
     public LayerMask BounceLayers;
 
-    private NavMeshAgent m_navMeshAgent;
+    private MotionBuffer m_motion;
     private ParticleSystem m_particles;
 
     private Vector3 m_velocity;
@@ -35,7 +35,7 @@ public class Launchable : MonoBehaviour {
     private float m_initStepOffset;
 
 	public void Awake () {
-        m_navMeshAgent = GetComponent<NavMeshAgent>();
+        m_motion = GetComponent<MotionBuffer>();
         m_particles = GetComponent<ParticleSystem>();
 	}
 
@@ -78,9 +78,9 @@ public class Launchable : MonoBehaviour {
         while (speed > 0f) {
             float dt = Time.deltaTime;
 
-            if (m_navMeshAgent.enabled) {
+            if (m_motion.enabled) {
                 NavMeshHit hit;
-                bool collision = m_navMeshAgent.Raycast(transform.position + velocity * dt, out hit);
+                bool collision = m_motion.Agent.Raycast(transform.position + velocity * dt, out hit);
 
                 if (collision) {
                     if (bounces != 0) {
@@ -99,7 +99,7 @@ public class Launchable : MonoBehaviour {
                     }
                 }
                 
-                m_navMeshAgent.Move(velocity * dt);
+                m_motion.Move(velocity * dt);
             }
 
             speed -= deceleration * dt * dt;

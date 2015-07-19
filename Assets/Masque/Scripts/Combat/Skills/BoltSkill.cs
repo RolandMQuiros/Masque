@@ -41,6 +41,7 @@ public class BoltSkill : PlayerSkill {
     private bool m_isFlurrying = false;
 
     private PlayerMotor m_movement;
+    private PlayerAim m_aim;
     private Launchable m_launchable;
     
     public void Awake() {
@@ -48,6 +49,7 @@ public class BoltSkill : PlayerSkill {
         StunBoltPrefab.CreatePool(2);
 
         m_movement = GetComponent<PlayerMotor>();
+        m_aim = GetComponent<PlayerAim>();
         m_launchable = GetComponent<Launchable>();
     }
 
@@ -60,10 +62,11 @@ public class BoltSkill : PlayerSkill {
     private IEnumerator Flurry() {
         m_isFlurrying = true;
         m_movement.Movement = PlayerMotor.MovementStyle.Lock;
+        Quaternion rotation = m_aim.Rotation;
 
         // Fire bullets with a time delay
         while (m_canFlurry) {
-            FireQuickBolt();
+            FireQuickBolt(rotation);
             yield return new WaitForSeconds(QuickBoltDelay);
         }
         m_isFlurrying = false;
@@ -88,10 +91,11 @@ public class BoltSkill : PlayerSkill {
         m_isFlurryScanning = false;
     }
 
-    private void FireQuickBolt() {
+    private void FireQuickBolt(Quaternion rotation) {
         // Calculate spread
         float spread = 2f * (Random.value - 0.5f) * QuickBoltSpread;
-        Quaternion direction = transform.rotation * Quaternion.AngleAxis(spread, Vector3.up);
+        
+        Quaternion direction = rotation * Quaternion.AngleAxis(spread, Vector3.up);
 
         // Fire quick bolt bullet
         QuickBoltPrefab.Spawn(transform.position, direction);
@@ -139,7 +143,7 @@ public class BoltSkill : PlayerSkill {
                     // Otherwise, just toss out a single quick bolt while constraining the player to strafing movement
                 } else {
                     // Spawn single bullet
-                    FireQuickBolt();
+                    FireQuickBolt(m_aim.Rotation);
                     m_launchable.LaunchForward(5f, 1000f, 0);
 
                     // Keep the player strafing for a little while
@@ -153,17 +157,21 @@ public class BoltSkill : PlayerSkill {
         m_chargeTime = 0f;
     }
 
-    public override void Interrupt() {
+    public override bool Interrupt() {
         StopAllCoroutines();
         m_isFlurrying = false;
         m_isFlurryScanning = false;
         m_canFlurry = false;
         m_quickBolts = 0;
+
+        return true;
     }
 
-    public override void Interrupt(PlayerSkill other) {
+    public override bool Interrupt(PlayerSkill other) {
         if (other is DashSkill) {
             Interrupt();
+            return true;
         }
+        return false;
     }
 }

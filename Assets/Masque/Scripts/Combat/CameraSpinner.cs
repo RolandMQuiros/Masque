@@ -7,7 +7,7 @@ using System.Collections;
 [RequireComponent(typeof(Camera))]
 public class CameraSpinner : MonoBehaviour {
     [Tooltip("Target transform")]
-    public Transform Target;
+    public Vector3 Target;
     [Tooltip("Radius of the circular track surrounding the target")]
     public float TrackRadius = 10f;
     [Tooltip("How high or low the camera is offset from the XZ plane of the target")]
@@ -35,13 +35,13 @@ public class CameraSpinner : MonoBehaviour {
 
         float angleInRadians = Mathf.Deg2Rad * Angle;
         m_destinationPosition = new Vector3(
-            Target.position.x + TrackRadius * Mathf.Cos(angleInRadians),
-            Target.position.y + TrackOffset,
-            Target.position.z + TrackRadius * Mathf.Sin(angleInRadians)
+            Target.x + TrackRadius * Mathf.Cos(angleInRadians),
+            Target.y + TrackOffset,
+            Target.z + TrackRadius * Mathf.Sin(angleInRadians)
         );
 
         m_camera.transform.position += (m_destinationPosition - m_camera.transform.position) / 5f;
 
-        m_camera.transform.rotation = Quaternion.LookRotation(Target.position - m_camera.transform.position);
+        m_camera.transform.rotation = Quaternion.LookRotation(Target - m_camera.transform.position);
 	}
 }

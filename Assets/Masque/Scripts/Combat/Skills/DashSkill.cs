@@ -2,11 +2,11 @@
 using System.Collections;
 
 public class DashSkill : PlayerSkill {
-    public float LongDashChargeThreshold = 0.5f;
+    public float LongDashChargeThreshold = 0.1f;
     public float ShortDashSpeed = 80f;
-    public float ShortDashDeceleration = 10000f;
+    public float ShortDashDeceleration = 1000f;
     public float FreezeMovmentControlTime = 0.2f;
-    public float InvincibilityTime = 2f;
+    public float InvincibilityTime = 0.5f;
 
     public float Radius = 20f;
 
@@ -18,6 +18,7 @@ public class DashSkill : PlayerSkill {
 
     private Coroutine m_invincibilityCountdown;
     private Coroutine m_unlockCountdown;
+    private float m_oldRadius;
 
     public void Awake() {
         m_motor = GetComponent<PlayerMotor>();
@@ -30,24 +31,33 @@ public class DashSkill : PlayerSkill {
     }
 
     public override void Hold() {
-        m_motor.Movement = PlayerMotor.MovementStyle.Lock;
         m_chargeTime += Time.deltaTime;
 
         if (m_chargeTime > LongDashChargeThreshold) {
-            m_aim.Show();
-            m_motor.Movement = PlayerMotor.MovementStyle.Aim;
+            m_motor.Movement = PlayerMotor.MovementStyle.Pivot;
+            
+            m_oldRadius = m_aim.OuterRadius;
+            m_aim.OuterRadius = Radius;
         }
     }
 
     public override void Release() {
-        m_aim.Hide();
+        //m_aim.Hide();
         if (m_chargeTime > LongDashChargeThreshold) {
             if (m_motor.WarpTo(m_aim.Target, Radius)) {
                 m_motor.Movement = PlayerMotor.MovementStyle.Free;
             }
+            m_aim.OuterRadius = m_oldRadius;
+            m_aim.Recenter();
             // Fall through to standard dash?
         } else {
-            m_launchable.LaunchForward(ShortDashSpeed, ShortDashDeceleration, 0);
+            if (m_motor.Velocity == Vector3.zero) {
+                m_launchable.Launch(m_aim.Direction * ShortDashSpeed, ShortDashDeceleration, 0);
+                Debug.Log(m_motor.Velocity.ToString() + " Aim Dash");
+            } else {
+                m_launchable.Launch(m_motor.Direction * ShortDashSpeed, ShortDashDeceleration, 0);
+                Debug.Log(m_motor.Velocity.ToString() + "Motor Dash");
+            }
 
             if (m_invincibilityCountdown != null) {
                 StopCoroutine(m_invincibilityCountdown);
