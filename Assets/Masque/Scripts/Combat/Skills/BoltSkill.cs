@@ -40,7 +40,8 @@ public class BoltSkill : PlayerSkill {
     private bool m_canFlurry = false;
     private bool m_isFlurrying = false;
 
-    private PlayerMotor m_movement;
+    private PlayerMotor m_motor;
+    private MotionBuffer m_motion;
     private PlayerAim m_aim;
     private Launchable m_launchable;
     
@@ -48,25 +49,27 @@ public class BoltSkill : PlayerSkill {
         QuickBoltPrefab.CreatePool(10);
         StunBoltPrefab.CreatePool(2);
 
-        m_movement = GetComponent<PlayerMotor>();
+        m_motor = GetComponent<PlayerMotor>();
+        m_motion = GetComponent<MotionBuffer>();
         m_aim = GetComponent<PlayerAim>();
         m_launchable = GetComponent<Launchable>();
     }
 
     private IEnumerator CooldownBeforeUnlockingPlayer(float time) {
         yield return new WaitForSeconds(time);
-        m_movement.Movement = PlayerMotor.MovementStyle.Free;
+        m_motor.Movement = PlayerMotor.MovementStyle.Free;
         IsFinished = true;
     }
 
     private IEnumerator Flurry() {
         m_isFlurrying = true;
-        m_movement.Movement = PlayerMotor.MovementStyle.Lock;
+        m_motor.Movement = PlayerMotor.MovementStyle.Lock;
         Quaternion rotation = m_aim.Rotation;
 
         // Fire bullets with a time delay
         while (m_canFlurry) {
             FireQuickBolt(rotation);
+            m_motion.Move(rotation * (Vector3.forward * 5f * Time.deltaTime));
             yield return new WaitForSeconds(QuickBoltDelay);
         }
         m_isFlurrying = false;
@@ -85,7 +88,7 @@ public class BoltSkill : PlayerSkill {
         if (quickBolts == m_quickBolts) {
             m_canFlurry = false;
             m_quickBolts = 0;
-            m_movement.Movement = PlayerMotor.MovementStyle.Free;
+            m_motor.Movement = PlayerMotor.MovementStyle.Free;
         }
 
         m_isFlurryScanning = false;
@@ -109,14 +112,14 @@ public class BoltSkill : PlayerSkill {
         m_chargeTime += Time.deltaTime;
 
         if (m_chargeTime > ChargeStartThreshold) {
-            m_movement.Movement = PlayerMotor.MovementStyle.Pivot;
+            m_motor.Movement = PlayerMotor.MovementStyle.Pivot;
         }
     }
     public override void Release() {
         // If charge above the Stun threshold, toss a long-range pinning bolt
         if (m_chargeTime > ChargeHoldThreshold) {
             StunBoltPrefab.Spawn(transform.position, transform.rotation);
-            m_launchable.LaunchBackward(80f, 8000f, 0);
+            m_launchable.LaunchBackward(40f, 80f, 0);
 
             // Lock player input for a little while
             if (m_cooldown != null) {
@@ -144,7 +147,7 @@ public class BoltSkill : PlayerSkill {
                 } else {
                     // Spawn single bullet
                     FireQuickBolt(m_aim.Rotation);
-                    m_launchable.LaunchForward(5f, 1000f, 0);
+                    m_launchable.LaunchForward(5f, 20f, 0);
 
                     // Keep the player strafing for a little while
                     if (m_cooldown != null) {

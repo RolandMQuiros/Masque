@@ -3,14 +3,19 @@ using System.Collections;
 
 public class DashSkill : PlayerSkill {
     public float LongDashChargeThreshold = 0.1f;
-    public float ShortDashSpeed = 80f;
-    public float ShortDashDeceleration = 1000f;
+
+    public float ShortDashDistance = 10f;
+    public float ShortDashTime = 0.6f;
+
     public float FreezeMovmentControlTime = 0.2f;
     public float InvincibilityTime = 0.5f;
 
     public float Radius = 20f;
 
     private float m_chargeTime = 0f;
+
+    private float m_initialSpeed;
+    private float m_deceleration;
     
     private PlayerMotor m_motor;
     private Launchable m_launchable;
@@ -27,7 +32,10 @@ public class DashSkill : PlayerSkill {
     }
 
     public override void Press() {
-        
+        m_initialSpeed = 2f * ShortDashDistance / ShortDashTime;
+        m_deceleration = m_initialSpeed / ShortDashTime;
+
+        Debug.Log("Dash {Speed, Deceleration} = { " + m_initialSpeed + ", " + m_deceleration + " }");
     }
 
     public override void Hold() {
@@ -52,11 +60,9 @@ public class DashSkill : PlayerSkill {
             // Fall through to standard dash?
         } else {
             if (m_motor.Velocity == Vector3.zero) {
-                m_launchable.Launch(m_aim.Direction * ShortDashSpeed, ShortDashDeceleration, 0);
-                Debug.Log(m_motor.Velocity.ToString() + " Aim Dash");
+                m_launchable.Launch(m_aim.Direction * m_initialSpeed, m_deceleration, 0);
             } else {
-                m_launchable.Launch(m_motor.Direction * ShortDashSpeed, ShortDashDeceleration, 0);
-                Debug.Log(m_motor.Velocity.ToString() + "Motor Dash");
+                m_launchable.Launch(m_motor.Direction * m_initialSpeed, m_deceleration, 0);
             }
 
             if (m_invincibilityCountdown != null) {
@@ -74,9 +80,7 @@ public class DashSkill : PlayerSkill {
     }
 
     private IEnumerator InvincibilityCountdown(float time) {
-        Debug.Log("Dash invincibility start");
         yield return new WaitForSeconds(time);
-        Debug.Log("Dash invincibility end");
     }
 
     private IEnumerator UnlockCountdown(float time) {

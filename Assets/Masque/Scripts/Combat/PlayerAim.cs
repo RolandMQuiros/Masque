@@ -1,7 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-[RequireComponent(typeof(PlayerMotor))]
 public class PlayerAim : MonoBehaviour {
     public const float MOUSE_ATTENUATION = 0.01f;
 
@@ -18,6 +17,8 @@ public class PlayerAim : MonoBehaviour {
     public float DriftSpeed = 2f;
 
     public Vector2 DebugRawAxes;
+
+    public PlanarViewVectors Plane { get; private set; }
 
     public bool IsHidden {
         get;
@@ -37,9 +38,6 @@ public class PlayerAim : MonoBehaviour {
         }
     }
 
-    private PlayerMotor m_movement;
-    private PlanarViewVectors m_plane;
-
     private Quaternion m_rotation;
     private Vector3 m_centroid;
     private Vector2 m_cursorPos;
@@ -47,9 +45,6 @@ public class PlayerAim : MonoBehaviour {
     private Vector3 m_offset;
 
     public void Awake() {
-        m_movement = GetComponent<PlayerMotor>();
-        m_plane = GetComponent<PlanarViewVectors>();
-
         Target = transform.position + (transform.rotation * Vector3.forward);
 
         if (InputMode == InputDevice.Mouse) {
@@ -62,6 +57,7 @@ public class PlayerAim : MonoBehaviour {
         if (Camera == null) {
             Camera = Camera.main;
         }
+        Plane = new PlanarViewVectors(Camera.transform);
     }
 
     public void Recenter() {
@@ -78,7 +74,7 @@ public class PlayerAim : MonoBehaviour {
                 m_axes.Set(Input.GetAxisRaw("Mouse X") * Sensitivity * Time.deltaTime,
                            Input.GetAxisRaw("Mouse Y") * Sensitivity * Time.deltaTime);
 
-                m_offset += ((m_plane.Forward * m_axes.y) + (m_plane.Right * m_axes.x));
+                m_offset += Plane.Transform(m_axes);
                 offsetMag = m_offset.magnitude;
                 break;
             case InputDevice.Gamepad:
@@ -86,7 +82,7 @@ public class PlayerAim : MonoBehaviour {
                 m_axes.Set(Input.GetAxisRaw("Aim X") * Sensitivity * Time.deltaTime,
                            Input.GetAxisRaw("Aim Y") * Sensitivity * Time.deltaTime);
 
-                m_offset += ((m_plane.Forward * m_axes.y) + (m_plane.Right * m_axes.x));
+                m_offset += Plane.Transform(m_axes);
                 offsetMag = m_offset.magnitude;
 
                 if (m_axes == Vector2.zero) {
@@ -115,14 +111,26 @@ public class PlayerAim : MonoBehaviour {
         
         Vector3 dp = Target - transform.position;
         if (dp != Vector3.zero) {
-            m_rotation = Quaternion.LookRotation(dp, m_plane.Up);
+            m_rotation = Quaternion.LookRotation(dp, Plane.Up);
             m_centroid = (dp / 2f) + transform.position;
+        } else {
+            m_rotation = Quaternion.identity;
+            m_centroid = transform.position;
         }
+    }
+
+    public void LateUpdate() {
+        Plane.RefreshBaseVectors(Camera.transform);
     }
 
     public void OnDrawGizmos() {
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(m_centroid, 1);
+
+        if (Plane != null) {
+            Gizmos.color = Color.green;
+            Gizmos.DrawLine(transform.position, transform.position + Plane.Up);
+        }
     }
 
     private Vector3 ScreenToWorldPoint(Vector2 screenPoint) {
@@ -133,7 +141,7 @@ public class PlayerAim : MonoBehaviour {
         float rayDist;
 
         // Find where on the ray it intersects with the player's current control plane
-        if (m_plane.Plane.Raycast(cursorRay, out rayDist)) {
+        if (Plane.Plane.Raycast(cursorRay, out rayDist)) {
             point = cursorRay.GetPoint(rayDist); // That intersection point is the cursor's world position
         }
         return point;

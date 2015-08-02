@@ -4,7 +4,6 @@ using System.Collections;
 /// <summary>
 /// Handles motion controls for Player, both mouse+keyboard and gamepad configuration.
 /// </summary>
-[RequireComponent(typeof(PlanarViewVectors))]
 [RequireComponent(typeof(MotionBuffer))]
 [RequireComponent(typeof(PlayerAim))]
 public class PlayerMotor : MonoBehaviour {
@@ -12,8 +11,11 @@ public class PlayerMotor : MonoBehaviour {
     public float DIRECTION_CHANGE_THRESHOLD = 0.05f;
     public string ANIM_WALKING_SPEED = "Walking Speed";
 
+    
     public Camera Camera;
     public float MovementSpeed = 10f;
+
+    public PlanarViewVectors ControlPlane;
 
     public enum MovementStyle {
         Free, // Move freely in all directions.  Player faces direction of crosshair
@@ -38,7 +40,6 @@ public class PlayerMotor : MonoBehaviour {
     public Vector3 Direction { get; private set; }
 
     #region components
-    private PlanarViewVectors m_viewPlane;
     private MotionBuffer m_motion;
     private Animator m_animator;
     private PlayerAim m_aim;
@@ -52,7 +53,6 @@ public class PlayerMotor : MonoBehaviour {
 
     public void Awake() {
         m_motion = GetComponent<MotionBuffer>();
-        m_viewPlane = GetComponent<PlanarViewVectors>();
         m_animator = GetComponent<Animator>();
         m_aim = GetComponent<PlayerAim>();
 
@@ -60,7 +60,10 @@ public class PlayerMotor : MonoBehaviour {
     }
 
     public void Start() {
-        m_viewPlane.RefreshBaseVectors(Camera.transform);
+        if (Camera == null) {
+            Camera = Camera.main;
+        }
+        ControlPlane = new PlanarViewVectors(Camera.transform);
     }
 
     public void Update() {
@@ -70,7 +73,6 @@ public class PlayerMotor : MonoBehaviour {
         );
 
         // Update movement
-        //m_viewPlane.RefreshBaseVectors(Camera.transform);
         Quaternion aimRot = m_aim.Rotation;
         switch (Movement) {
             case MovementStyle.Free:
@@ -90,15 +92,19 @@ public class PlayerMotor : MonoBehaviour {
         }
 
         if (Velocity != Vector3.zero) {
-            Rotation = Quaternion.LookRotation(Velocity, m_viewPlane.Up);
+            Rotation = Quaternion.LookRotation(Velocity, ControlPlane.Up);
             Direction = Velocity.normalized;
         }
 
         DebugVelocity = Velocity;
     }
 
+    public void LateUpdate() {
+        ControlPlane.RefreshBaseVectors(Camera.transform);
+    }
+
     public Vector3 Move(Vector2 axes, float speed, bool turnToMotion = false, float turnSmoothing = DEFAULT_TURN_SMOOTHING) {
-        Vector3 direction = m_viewPlane.Apply(axes);
+        Vector3 direction = ControlPlane.Transform(axes);
 
         Vector3 velocity = direction * speed * Time.deltaTime;
         if (m_motion.enabled) {
@@ -114,7 +120,7 @@ public class PlayerMotor : MonoBehaviour {
 
     public void RotateTo(Vector3 direction, float turnSmoothing = DEFAULT_TURN_SMOOTHING) {
         if (direction != Vector3.zero) {
-            m_targetRotation = Quaternion.LookRotation(direction, m_viewPlane.Up);
+            m_targetRotation = Quaternion.LookRotation(direction, ControlPlane.Up);
             Quaternion newRotation = Quaternion.Lerp(transform.rotation, m_targetRotation, turnSmoothing * Time.deltaTime);
             transform.rotation = newRotation;
         }

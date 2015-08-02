@@ -102,8 +102,8 @@ public class Launchable : MonoBehaviour {
                 m_motion.Move(velocity * dt);
             }
 
-            speed -= deceleration * dt * dt;
-            velocity -= deceleration * dt * dt * velocity.normalized;
+            speed -= deceleration * dt;
+            velocity -= deceleration * dt * velocity.normalized;
 
             yield return null;
         }

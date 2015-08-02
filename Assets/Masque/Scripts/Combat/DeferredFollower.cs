@@ -3,67 +3,92 @@ using System.Collections;
 
 [RequireComponent(typeof(MotionBuffer))]
 public class DeferredFollower : MonoBehaviour {
-    [Tooltip("Target GameObject's Transform")]
-    public Transform Target;
+    [Tooltip("Target position")]
+    public Vector3 Target;
     [Tooltip("Time between Linecasts between this object and its Target.  A failed raycast causes this Follower " +
              "to use pathfinding instead of direct movement")]
     public float LinecastInterval = 2f;
     [Tooltip("Length of the Linecast")]
     public float LinecastLength = 10f;
-    public float Speed = 100f;
 
     private MotionBuffer m_motion;
+    private NavMeshAgent m_agent;
     private Coroutine m_linecaster;
-    private bool m_isTargetObscured = false;
+
+    public bool m_isTargetObscured = false;
+    public bool m_usePathfinding = false;
+    public bool m_linecasterRunning = false;
+
+    public Vector3 dest;
 
 	public void Awake () {
         m_motion = GetComponent<MotionBuffer>();
-        m_linecaster = StartCoroutine(CheckLinecast());
+        m_agent = GetComponent<NavMeshAgent>();
 	}
 
     public void OnEnable() {
-        m_linecaster = StartCoroutine(CheckLinecast());
+        if (m_linecaster == null) {
+            m_linecaster = StartCoroutine(CheckLinecast());
+        }
     }
 
     public void OnDisable() {
-        StopCoroutine(m_linecaster);
+        if (m_linecaster != null) {
+            StopCoroutine(m_linecaster);
+        }
     }
 	
 	public void Update () {
-        if (Target.gameObject.activeSelf) {
-            /*if (m_isTargetObscured) {
-                m_motion.Agent.SetDestination(Target.position);
-            } else {*/
-                Vector3 dp = Target.position - transform.position;
-                Vector3 direction = dp.normalized;
-                Vector3 move = direction * Speed * Time.deltaTime;
+        NavMeshHit hit;
+        m_isTargetObscured = m_agent.Raycast(Target, out hit);
+        
+        if (m_isTargetObscured && !m_linecasterRunning) {
+            m_linecaster = StartCoroutine(CheckLinecast());
+        } else if (!m_isTargetObscured && m_linecasterRunning) {
+            m_linecasterRunning = false;
+            m_usePathfinding = false;
+            m_agent.ResetPath();
+            StopCoroutine(m_linecaster);
+        } else {
+            m_agent.ResetPath();
+            m_linecasterRunning = false;
+            m_usePathfinding = false;
+        }
 
-                if (dp.sqrMagnitude < move.sqrMagnitude) {
-                    //m_motion.Move(dp);
-                    transform.position += dp;
-                } else {
-                    //m_motion.Move(move);
-                    transform.position += move;
-                }
+        if (!m_usePathfinding) {
+            NavMesh.SamplePosition(Target, out hit, m_agent.height, NavMesh.AllAreas);
+            
+            Vector3 dp = hit.position - transform.position;
+            Vector3 direction = dp.normalized;
+            Vector3 move = direction * m_agent.speed * Time.deltaTime;
+
+            //if (dp.sqrMagnitude < move.sqrMagnitude) {
+            //    m_motion.Move(dp);
+            //} else {
+                m_motion.Move(move);
             //}
         }
+
+        dest = m_agent.destination;
 	}
 
     public void OnDrawGizmos() {
-        if (Target != null && Target.gameObject.activeSelf) {
-            Gizmos.color = Color.green;
-            Gizmos.DrawSphere(Target.position, 0.2f);
-        }
+        Gizmos.color = Color.green;
+        Gizmos.DrawSphere(Target, 0.2f);
     }
 
     private IEnumerator CheckLinecast() {
-        while (true) {
-            if (Target != null && Target.gameObject.activeSelf) {
-                NavMeshHit hit;
-                m_isTargetObscured = m_motion.Agent.Raycast(Target.position, out hit);
-            }
-
+        m_linecasterRunning = true;
+        while (m_linecasterRunning) {
             yield return new WaitForSeconds(LinecastInterval);
+
+            m_usePathfinding = m_isTargetObscured;
+            
+            if (m_isTargetObscured) {
+                m_agent.SetDestination(Target);
+            } else {
+                m_agent.ResetPath();
+            }
         }
     }
 }
