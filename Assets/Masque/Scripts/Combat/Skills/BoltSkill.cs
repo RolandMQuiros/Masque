@@ -44,8 +44,28 @@ public class BoltSkill : PlayerSkill {
     private MotionBuffer m_motion;
     private PlayerAim m_aim;
     private Launchable m_launchable;
-    
-    public void Awake() {
+
+    public override PlayerSkill Clone(GameObject target) {
+        BoltSkill other = target.AddComponent<BoltSkill>();
+        
+        other.ChargeStartThreshold = ChargeStartThreshold; 
+        other.ChargeHoldThreshold = ChargeHoldThreshold;
+        other.StunBoltLockTime = StunBoltLockTime;
+        other.QuickBoltLockTime = QuickBoltLockTime;
+        other.QuickBoltDelay = QuickBoltDelay;
+        other.FlurryMaxBolts = FlurryMaxBolts;
+        other.FlurryPressThreshold = FlurryPressThreshold;
+        other.FlurryPressTime = FlurryPressTime;
+        other.FlurryLockTime = FlurryLockTime;
+        other.AimingMovementSpeed = AimingMovementSpeed;
+        other.QuickBoltSpread = QuickBoltSpread;
+        other.QuickBoltPrefab = QuickBoltPrefab;
+        other.StunBoltPrefab = StunBoltPrefab;
+
+        return other;
+    }
+
+    public void Start() {
         QuickBoltPrefab.CreatePool(10);
         StunBoltPrefab.CreatePool(2);
 
@@ -53,6 +73,8 @@ public class BoltSkill : PlayerSkill {
         m_motion = GetComponent<MotionBuffer>();
         m_aim = GetComponent<PlayerAim>();
         m_launchable = GetComponent<Launchable>();
+
+        Debug.Log("BoltSkill Awoken");
     }
 
     private IEnumerator CooldownBeforeUnlockingPlayer(float time) {

@@ -4,63 +4,80 @@ using System.Collections.Generic;
 
 public class PlayerAllyOrbiter : MonoBehaviour {
     public float Radius = 4f;
-    public DeferredFollower[] Allies = new DeferredFollower[1];
     public DeferredFollower ActiveAlly {
         get {
-            return Allies[(int)m_startIdx];
+            if (m_allies.Count > 0) {
+                return m_allies.Get(0);
+            } else {
+                return null;
+            }
         }
     }
-    
+
     private List<Vector3> m_offsets = new List<Vector3>();
-    private List<DeferredFollower> m_allies = new List<DeferredFollower>();
+    private Deque<DeferredFollower> m_allies = new Deque<DeferredFollower>();
     private List<AllyOrbitAnchor> m_anchors = new List<AllyOrbitAnchor>();
 
-    private uint m_startIdx = 0;
-
     public void Start() {
-        for (int i = 0; i < Allies.Length; i++) {
-            m_allies.Add(Allies[i]);
-        }
-
         UpdateOffsets();
     }
 
     public void Update() {
-        if (Input.GetButtonDown("Cycle Forward")) {
-            CycleForward();
-        } else if (Input.GetButtonDown("Cycle Backward")) {
-            CycleBackward();
-        }
-
         for (int i = 0; i < m_allies.Count; i++) {
-            m_allies[((int)m_startIdx + i) % m_allies.Count].Target = m_anchors[i].transform.position;
+            if (i == 0) {
+                m_allies[i].transform.localRotation = Quaternion.identity;
+            }
+
+            m_allies[i].Target = m_anchors[i].transform.position;
         }
     }
     
     public void AddAlly(DeferredFollower ally) {
-        m_allies.Add(ally);
-        UpdateOffsets();
-    }
-
-    public void RemoveAlly(DeferredFollower ally) {
-        int idx = m_allies.IndexOf(ally);
-        if (idx >= 0) {
-            m_allies.RemoveAt(idx);
+        if (ally != null) {
+            m_allies.AddBack(ally);
             UpdateOffsets();
         }
     }
 
+    public void RemoveAlly(DeferredFollower ally) {
+        if (ally != null) {
+            m_allies.Remove(ally);
+            OrphanAlly(ally);
+
+            UpdateOffsets();
+        }
+    }
+
+    public void RemoveFront() {
+        DeferredFollower front = m_allies.RemoveFront();
+        OrphanAlly(front);
+
+        UpdateOffsets();
+    }
+
+    public void RemoveBack() {
+        m_allies.RemoveBack();
+        UpdateOffsets();
+    }
+
     public void CycleForward() {
-        m_startIdx = (m_startIdx - 1) % (uint)m_allies.Count;
-        for (int i = 0; i < m_allies.Count; i++) {
-            int idx = (int)(m_startIdx + i) % m_allies.Count;
+        if (m_allies.Count > 0) {
+            DeferredFollower front = m_allies.RemoveFront();
+            OrphanAlly(front);
+
+            m_allies.AddBack(front);
+            AdoptAlly(m_allies.Get(0));
         }
     }
 
     public void CycleBackward() {
-        m_startIdx = (m_startIdx + 1) % (uint)m_allies.Count;
-        for (int i = 0; i < m_allies.Count; i++) {
-            int idx = (int)(m_startIdx + i) % m_allies.Count;
+        if (m_allies.Count > 0) {
+            DeferredFollower back = m_allies.RemoveBack();
+            DeferredFollower front = m_allies.Get(0);
+
+            OrphanAlly(front);
+            m_allies.AddFront(back);
+            AdoptAlly(back);
         }
     }
 
@@ -68,8 +85,12 @@ public class PlayerAllyOrbiter : MonoBehaviour {
         float angleInterval = 2f * Mathf.PI / m_allies.Count;
 
         // Disable any extra anchor objects
-        for (int i = m_allies.Count; i < m_anchors.Count; i++) {
-            m_anchors[i].gameObject.SetActive(false);
+        for (int i = 0; i < m_anchors.Count; i++) {
+            if (i < m_allies.Count) {
+                m_anchors[i].gameObject.SetActive(true);
+            } else {
+                m_anchors[i].gameObject.SetActive(false);
+            }
         }
 
         for (int i = 0; i < m_allies.Count; i++) {
@@ -102,7 +123,22 @@ public class PlayerAllyOrbiter : MonoBehaviour {
             }
 
             // Point each ally to their respective point
-            m_allies[((int)m_startIdx + i) % m_allies.Count].Target = m_anchors[i].transform.position;
+            m_allies[i].Target = m_anchors[i].transform.position;
+
+            if (i == 0) {
+                AdoptAlly(m_allies[i]);
+            }
         }
+    }
+
+    private void AdoptAlly(DeferredFollower ally) {
+        ally.transform.parent = gameObject.transform;
+        ally.RotateToMovement = false;
+        ally.transform.localRotation = Quaternion.identity;
+    }
+
+    private void OrphanAlly(DeferredFollower ally) {
+        ally.transform.parent = null;
+        ally.RotateToMovement = true;
     }
 }

@@ -18,6 +18,7 @@ public class DashSkill : PlayerSkill {
     private float m_deceleration;
     
     private PlayerMotor m_motor;
+    private PlayerSkillController m_skillController;
     private Launchable m_launchable;
     private PlayerAim m_aim;
 
@@ -25,10 +26,24 @@ public class DashSkill : PlayerSkill {
     private Coroutine m_unlockCountdown;
     private float m_oldRadius;
 
-    public void Awake() {
+    public override PlayerSkill Clone(GameObject target) {
+        DashSkill other = target.AddComponent<DashSkill>();
+
+        other.LongDashChargeThreshold = LongDashChargeThreshold;
+        other.ShortDashDistance = ShortDashDistance;
+        other.ShortDashTime = ShortDashTime;
+        other.FreezeMovmentControlTime = FreezeMovmentControlTime;
+        other.InvincibilityTime = InvincibilityTime;
+        other.Radius = Radius;
+
+        return other;
+    }
+
+    public void Start() {
         m_motor = GetComponent<PlayerMotor>();
         m_launchable = GetComponent<Launchable>();
         m_aim = GetComponent<PlayerAim>();
+        m_skillController = GetComponent<PlayerSkillController>();
     }
 
     public override void Press() {
@@ -52,11 +67,16 @@ public class DashSkill : PlayerSkill {
     public override void Release() {
         //m_aim.Hide();
         if (m_chargeTime > LongDashChargeThreshold) {
+            NavMeshAgent activeAgent = m_skillController.ActiveAlly.ParentFollower.gameObject.GetComponent<NavMeshAgent>();
+            activeAgent.enabled = false;
+
             if (m_motor.WarpTo(m_aim.Target, Radius)) {
                 m_motor.Movement = PlayerMotor.MovementStyle.Free;
             }
             m_aim.OuterRadius = m_oldRadius;
             m_aim.Recenter();
+
+            activeAgent.enabled = true;
             // Fall through to standard dash?
         } else {
             if (m_motor.Velocity == Vector3.zero) {

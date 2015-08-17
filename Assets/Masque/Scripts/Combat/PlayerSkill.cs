@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System;
 using System.Collections;
 
 public abstract class PlayerSkill : MonoBehaviour {
@@ -24,6 +25,7 @@ public abstract class PlayerSkill : MonoBehaviour {
 
     public bool IsFinished = true;
 
+    public abstract PlayerSkill Clone(GameObject target);
     public virtual void Press() { }
     public virtual void Hold() { }
     public virtual void Release() { }

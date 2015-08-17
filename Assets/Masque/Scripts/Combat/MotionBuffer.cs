@@ -45,7 +45,12 @@ public class MotionBuffer : MonoBehaviour {
     /// <returns></returns>
     private IEnumerator BeforeLateUpdate() {
         while (true) {
-            Agent.Move(Offset);
+            if (Agent != null && Agent.enabled) {
+                Agent.Move(Offset);
+            } else {
+                transform.Translate(Offset);
+            }
+
             DebugOffset = Offset;
             Offset = new Vector3();
             yield return new WaitForEndOfFrame();

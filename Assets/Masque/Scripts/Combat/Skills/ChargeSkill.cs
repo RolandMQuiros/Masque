@@ -19,8 +19,23 @@ public class ChargeSkill : PlayerSkill {
     private bool m_isCharging;
     private float m_speed;
     private Quaternion m_endRotation;
-	
-	public void Awake () {
+
+    public override PlayerSkill Clone(GameObject target) {
+        ChargeSkill other = target.AddComponent<ChargeSkill>();
+
+        other.DistanceThreshold = DistanceThreshold;
+        other.MaxChargeSpeed = MaxChargeSpeed;
+        other.Acceleration = Acceleration;
+        other.Friction = Friction;
+        other.TurnSpeed = TurnSpeed;
+        other.CrashSpeedThreshold = CrashSpeedThreshold;
+        other.GlancingAngleThreshold = GlancingAngleThreshold;
+        other.RecoilElasticity = RecoilElasticity;
+
+        return other;
+    }
+
+	public void Start () {
         m_aim = GetComponent<PlayerAim>();
         m_motor = GetComponent<PlayerMotor>();
         m_motion = GetComponent<MotionBuffer>();

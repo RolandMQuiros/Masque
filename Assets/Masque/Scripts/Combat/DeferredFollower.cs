@@ -3,6 +3,8 @@ using System.Collections;
 
 [RequireComponent(typeof(MotionBuffer))]
 public class DeferredFollower : MonoBehaviour {
+    private const float ROTATE_TO_MOVE_THRESHOLD = 1f;
+
     [Tooltip("Target position")]
     public Vector3 Target;
     [Tooltip("Time between Linecasts between this object and its Target.  A failed raycast causes this Follower " +
@@ -10,6 +12,8 @@ public class DeferredFollower : MonoBehaviour {
     public float LinecastInterval = 2f;
     [Tooltip("Length of the Linecast")]
     public float LinecastLength = 10f;
+
+    public bool RotateToMovement = true;
 
     private MotionBuffer m_motion;
     private NavMeshAgent m_agent;
@@ -20,6 +24,7 @@ public class DeferredFollower : MonoBehaviour {
     public bool m_linecasterRunning = false;
 
     public Vector3 dest;
+    public float dip;
 
 	public void Awake () {
         m_motion = GetComponent<MotionBuffer>();
@@ -36,6 +41,13 @@ public class DeferredFollower : MonoBehaviour {
         if (m_linecaster != null) {
             StopCoroutine(m_linecaster);
         }
+    }
+
+    public void ForcePathfinding() {
+        if (m_linecaster != null) {
+            StopCoroutine(m_linecaster);
+        }
+        m_linecasterRunning = false;
     }
 	
 	public void Update () {
@@ -62,14 +74,22 @@ public class DeferredFollower : MonoBehaviour {
             Vector3 direction = dp.normalized;
             Vector3 move = direction * m_agent.speed * Time.deltaTime;
 
+            dest = hit.position;
+
             //if (dp.sqrMagnitude < move.sqrMagnitude) {
             //    m_motion.Move(dp);
             //} else {
                 m_motion.Move(move);
             //}
-        }
 
-        dest = m_agent.destination;
+            dip = dp.magnitude;
+
+            if (RotateToMovement && dp.magnitude > ROTATE_TO_MOVE_THRESHOLD) {
+                Quaternion rot = Quaternion.LookRotation(Vector3.ProjectOnPlane(direction, Vector3.up), Vector3.up);
+                Quaternion newRotation = Quaternion.Lerp(transform.rotation, rot, 10f * Time.deltaTime);
+                transform.rotation = newRotation;
+            }
+        }
 	}
 
     public void OnDrawGizmos() {
