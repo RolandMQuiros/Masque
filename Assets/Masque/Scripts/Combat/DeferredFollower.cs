@@ -22,6 +22,7 @@ public class DeferredFollower : MonoBehaviour {
     public bool m_isTargetObscured = false;
     public bool m_usePathfinding = false;
     public bool m_linecasterRunning = false;
+    private bool m_forcePathfinding = false;
 
     public Vector3 dest;
     public float dip;
@@ -48,6 +49,7 @@ public class DeferredFollower : MonoBehaviour {
             StopCoroutine(m_linecaster);
         }
         m_linecasterRunning = false;
+        m_forcePathfinding = true;
     }
 	
 	public void Update () {
@@ -55,13 +57,16 @@ public class DeferredFollower : MonoBehaviour {
         m_isTargetObscured = m_agent.Raycast(Target, out hit);
         
         if (m_isTargetObscured && !m_linecasterRunning) {
+            // If the target is not within line-of-sight and the line caster isn't running, start it up
             m_linecaster = StartCoroutine(CheckLinecast());
         } else if (!m_isTargetObscured && m_linecasterRunning) {
+            // If the target is within line-of-sight, stop the line caster and just beeline to the target
             m_linecasterRunning = false;
             m_usePathfinding = false;
             m_agent.ResetPath();
             StopCoroutine(m_linecaster);
-        } else {
+        } else if (!m_isTargetObscured) {
+            // If target isn't obscured, beeline to target
             m_agent.ResetPath();
             m_linecasterRunning = false;
             m_usePathfinding = false;
@@ -100,7 +105,12 @@ public class DeferredFollower : MonoBehaviour {
     private IEnumerator CheckLinecast() {
         m_linecasterRunning = true;
         while (m_linecasterRunning) {
-            yield return new WaitForSeconds(LinecastInterval);
+            if (m_forcePathfinding) {
+                m_forcePathfinding = false;
+            } else {
+                yield return new WaitForSeconds(LinecastInterval);
+            }
+            
 
             m_usePathfinding = m_isTargetObscured;
             

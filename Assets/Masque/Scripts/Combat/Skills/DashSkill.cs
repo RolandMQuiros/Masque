@@ -49,8 +49,7 @@ public class DashSkill : PlayerSkill {
     public override void Press() {
         m_initialSpeed = 2f * ShortDashDistance / ShortDashTime;
         m_deceleration = m_initialSpeed / ShortDashTime;
-
-        Debug.Log("Dash {Speed, Deceleration} = { " + m_initialSpeed + ", " + m_deceleration + " }");
+        m_oldRadius = m_aim.OuterRadius;
     }
 
     public override void Hold() {
@@ -59,7 +58,6 @@ public class DashSkill : PlayerSkill {
         if (m_chargeTime > LongDashChargeThreshold) {
             m_motor.Movement = PlayerMotor.MovementStyle.Pivot;
             
-            m_oldRadius = m_aim.OuterRadius;
             m_aim.OuterRadius = Radius;
         }
     }
